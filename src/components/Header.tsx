@@ -1,11 +1,13 @@
 import React from 'react';
 import { Settings, Zap, Wifi, WifiOff } from 'lucide-react';
 
+export type TabType = 'today' | 'history' | 'heatmap' | 'finance';
+
 interface HeaderProps {
   isSupabaseConnected: boolean;
   onOpenSettings: () => void;
-  activeTab: 'today' | 'heatmap' | 'finance';
-  setActiveTab: (tab: 'today' | 'heatmap' | 'finance') => void;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -85,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="max-w-4xl mx-auto px-4 flex border-t border-slate-800/60">
+      <div className="max-w-4xl mx-auto px-2 sm:px-4 flex border-t border-slate-800/60">
         <button
           onClick={() => setActiveTab('today')}
           className={`flex-1 py-2.5 text-xs font-semibold text-center border-b-2 transition-all ${
@@ -94,7 +96,17 @@ export const Header: React.FC<HeaderProps> = ({
               : 'text-slate-400 border-transparent hover:text-slate-200'
           }`}
         >
-          今日習慣追蹤
+          今日打卡
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 py-2.5 text-xs font-semibold text-center border-b-2 transition-all ${
+            activeTab === 'history'
+              ? 'text-emerald-400 border-emerald-400'
+              : 'text-slate-400 border-transparent hover:text-slate-200'
+          }`}
+        >
+          歷史紀錄
         </button>
         <button
           onClick={() => setActiveTab('heatmap')}
@@ -104,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
               : 'text-slate-400 border-transparent hover:text-slate-200'
           }`}
         >
-          習慣熱力圖 (Heatmap)
+          習慣熱力圖
         </button>
         <button
           onClick={() => setActiveTab('finance')}

@@ -346,6 +346,35 @@ export async function undoUrge(
   });
 }
 
+// 直接修改特定日期的抗菸/抗酒次數
+export async function updateUrgeLog(
+  habitId: 'smoke_free' | 'sober',
+  logDate: string,
+  resisted: number,
+  consumed: number
+): Promise<HabitLog> {
+  const logs = await getLogs();
+  const existing = logs.find(l => l.habit_id === habitId && l.log_date === logDate);
+  const habit = (await getHabits()).find(h => h.id === habitId);
+  const costPerUnit = habit?.cost_per_day ?? (habitId === 'sober' ? 50 : 6.5);
+  const netSaved = Math.round((resisted - consumed) * costPerUnit * 10) / 10;
+  const unitLabel = habit?.unit || (habitId === 'sober' ? '瓶' : '根');
+
+  return await saveHabitLog({
+    id: existing?.id,
+    habit_id: habitId,
+    log_date: logDate,
+    completed: resisted > 0 || consumed > 0,
+    value: netSaved,
+    metrics: {
+      resisted,
+      consumed,
+      netSaved,
+    },
+    note: `抵抗 ${resisted} 次，使用 ${consumed} ${unitLabel}`,
+  });
+}
+
 // 舊版別名相容
 export const recordSmokingUrge = (outcome: 'resisted' | 'smoked') =>
   recordUrge('smoke_free', outcome === 'resisted' ? 'resisted' : 'consumed');

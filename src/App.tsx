@@ -5,17 +5,19 @@ import {
   getLogs,
   getStreakResets,
   saveHabitLog,
+  deleteHabitLog,
   resetStreak,
   updateHabitCost,
   resetAllToCleanSlate,
   recordUrge,
   undoUrge,
+  updateUrgeLog,
   subscribeToRealtime,
   getLocalDateString,
   calculateStreak,
 } from './lib/storage';
 import { getSupabase } from './lib/supabase';
-import { Header } from './components/Header';
+import { Header, TabType } from './components/Header';
 import { HabitCard } from './components/HabitCard';
 import { NumericLogModal } from './components/NumericLogModal';
 import { ResetStreakModal } from './components/ResetStreakModal';
@@ -23,8 +25,10 @@ import { StreakHeatmap } from './components/StreakHeatmap';
 import { MoneySavedBanner } from './components/MoneySavedBanner';
 import { SettingsModal } from './components/SettingsModal';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { HistoryTimeline } from './components/HistoryTimeline';
+import { UndoToast, ToastData } from './components/UndoToast';
+import { UrgeEditModal } from './components/UrgeEditModal';
 import {
-  Flame,
   Footprints,
   Dumbbell,
   DollarSign,
@@ -40,13 +44,22 @@ export function App() {
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
   // 導覽狀態
-  const [activeTab, setActiveTab] = useState<'today' | 'heatmap' | 'finance'>('today');
+  const [activeTab, setActiveTab] = useState<TabType>('today');
+
+  // 即時 5 秒防誤按 Toast
+  const [undoToast, setUndoToast] = useState<ToastData | null>(null);
 
   // Modal 狀態
   const [numericModal, setNumericModal] = useState<{
     isOpen: boolean;
     habit: Habit | null;
     log?: HabitLog | null;
+  }>({ isOpen: false, habit: null, log: null });
+
+  const [urgeEditModal, setUrgeEditModal] = useState<{
+    isOpen: boolean;
+    habit: Habit | null;
+    log: HabitLog | null;
   }>({ isOpen: false, habit: null, log: null });
 
   const [resetModal, setResetModal] = useState<{
@@ -116,6 +129,12 @@ export function App() {
     await loadData();
   };
 
+  // 刪除指定習慣紀錄 (歷史時間軸中呼叫)
+  const handleDeleteLog = async (habitId: string, logDate: string) => {
+    await deleteHabitLog(habitId, logDate);
+    await loadData();
+  };
+
   // 破戒重置
   const handleConfirmReset = async (habitId: string, reason: string) => {
     await resetStreak(habitId, reason);
@@ -128,15 +147,47 @@ export function App() {
     await loadData();
   };
 
-  // 衝動對決記錄 (抗酒或抗菸)
+  // 衝動對決記錄 (抗酒或抗菸) + 觸發 5 秒防誤按 Toast
   const handleUrgeAction = async (habitId: string, outcome: 'resisted' | 'consumed') => {
     await recordUrge(habitId as 'sober' | 'smoke_free', outcome);
     await loadData();
+
+    const habit = habits.find((h) => h.id === habitId);
+    const unitCost = habit?.cost_per_day ?? (habitId === 'sober' ? 50 : 6.5);
+    const isAlcohol = habitId === 'sober';
+
+    let msg = '';
+    if (outcome === 'resisted') {
+      msg = isAlcohol
+        ? `已記錄少喝一瓶 💪 (+NT$${unitCost})`
+        : `已記錄抗菸成功 💪 (+NT$${unitCost})`;
+    } else {
+      msg = isAlcohol
+        ? `已記錄喝了一瓶 🍺 (-NT$${unitCost})`
+        : `已記錄抽了一根 🚬 (-NT$${unitCost})`;
+    }
+
+    setUndoToast({
+      id: crypto.randomUUID(),
+      message: msg,
+      onUndo: () => handleUndoUrgeAction(habitId, outcome),
+    });
   };
 
   // 衝動對決倒扣 (防誤點)
   const handleUndoUrgeAction = async (habitId: string, outcome: 'resisted' | 'consumed') => {
     await undoUrge(habitId as 'sober' | 'smoke_free', outcome);
+    await loadData();
+  };
+
+  // 歷史紀錄中修改抗酒/抗菸次數
+  const handleSaveUrgeEdit = async (
+    habitId: 'sober' | 'smoke_free',
+    logDate: string,
+    resisted: number,
+    consumed: number
+  ) => {
+    await updateUrgeLog(habitId, logDate, resisted, consumed);
     await loadData();
   };
 
@@ -202,7 +253,7 @@ export function App() {
           </div>
         ) : (
           <>
-            {/* Tab 1: 今日習慣總覽 */}
+            {/* Tab 1: 今日打卡總覽 */}
             {activeTab === 'today' && (
               <div className="space-y-5 animate-in fade-in duration-200">
                 {/* 頂部激勵四格數據卡 */}
@@ -286,14 +337,31 @@ export function App() {
               </div>
             )}
 
-            {/* Tab 2: 習慣熱力圖 */}
+            {/* Tab 2: 歷史紀錄 (時間軸可修改/刪除) */}
+            {activeTab === 'history' && (
+              <div className="animate-in fade-in duration-200">
+                <HistoryTimeline
+                  habits={habits}
+                  logs={logs}
+                  onEditNumeric={(habit, log) =>
+                    setNumericModal({ isOpen: true, habit, log })
+                  }
+                  onEditUrge={(habit, log) =>
+                    setUrgeEditModal({ isOpen: true, habit, log })
+                  }
+                  onDeleteLog={handleDeleteLog}
+                />
+              </div>
+            )}
+
+            {/* Tab 3: 習慣熱力圖 */}
             {activeTab === 'heatmap' && (
               <div className="animate-in fade-in duration-200">
                 <StreakHeatmap habits={habits} logs={logs} resets={resets} />
               </div>
             )}
 
-            {/* Tab 3: 省錢里程碑 */}
+            {/* Tab 4: 省錢里程碑 */}
             {activeTab === 'finance' && (
               <div className="animate-in fade-in duration-200">
                 <MoneySavedBanner habits={habits} logs={logs} resets={resets} />
@@ -312,7 +380,17 @@ export function App() {
         onSave={handleSaveNumericLog}
       />
 
-      {/* 戒斷破戒重置 Modal (備用) */}
+      {/* 衝動對抗紀錄修改 Modal (抗酒 / 抗菸) */}
+      <UrgeEditModal
+        habit={urgeEditModal.habit}
+        log={urgeEditModal.log}
+        isOpen={urgeEditModal.isOpen}
+        onClose={() => setUrgeEditModal({ isOpen: false, habit: null, log: null })}
+        onSave={handleSaveUrgeEdit}
+        onDelete={handleDeleteLog}
+      />
+
+      {/* 戒斷破戒重置 Modal */}
       <ResetStreakModal
         habit={resetModal.habit}
         isOpen={resetModal.isOpen}
@@ -329,6 +407,9 @@ export function App() {
         onResetAllData={handleResetAllData}
         onRefreshData={loadData}
       />
+
+      {/* 即時 5 秒防誤觸 Undo Toast */}
+      <UndoToast toast={undoToast} onClose={() => setUndoToast(null)} />
     </div>
   );
 }
