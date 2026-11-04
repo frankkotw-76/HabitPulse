@@ -23,7 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   }).format(new Date());
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
+    <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
         {/* Brand */}
         <div className="flex items-center gap-3">

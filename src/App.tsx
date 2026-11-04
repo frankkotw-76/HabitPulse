@@ -230,7 +230,7 @@ export function App() {
   const todaySmokeConsumed = Number(todaySmokeLog?.metrics?.consumed ?? todaySmokeLog?.metrics?.smoked) || 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-16">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-[calc(4rem+env(safe-area-inset-bottom,0px))]">
       {/* 頂部導覽列 */}
       <Header
         isSupabaseConnected={isSupabaseConnected}
