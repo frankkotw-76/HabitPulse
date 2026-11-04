@@ -1,7 +1,6 @@
 import confetti from 'canvas-confetti';
 
 export function triggerCelebration() {
-  // 雙側繽紛煙火效果
   const count = 200;
   const defaults = {
     origin: { y: 0.7 },
@@ -41,7 +40,6 @@ export function triggerCelebration() {
 }
 
 export function triggerStreakMilestone(days: number) {
-  // 針對連勝達標的金色炫彩慶祝
   const colors = ['#f59e0b', '#fbbf24', '#10b981', '#3b82f6', '#ec4899'];
   
   confetti({
@@ -60,5 +58,17 @@ export function triggerStreakMilestone(days: number) {
     origin: { x: 1 },
     colors: colors,
     zIndex: 9999
+  });
+}
+
+// 成功壓制菸癮時的即時鼓勵微彩帶
+export function triggerUrgeResistedConfetti() {
+  confetti({
+    particleCount: 35,
+    spread: 45,
+    origin: { y: 0.6 },
+    colors: ['#10b981', '#34d399', '#6ee7b7', '#facc15'],
+    zIndex: 9999,
+    disableForReducedMotion: true,
   });
 }

@@ -13,8 +13,12 @@ import {
   Edit2,
   Check,
   X,
+  ShieldCheck,
+  Cigarette,
+  Sparkles,
+  Minus,
 } from 'lucide-react';
-import { triggerStreakMilestone } from '../lib/confetti';
+import { triggerStreakMilestone, triggerUrgeResistedConfetti } from '../lib/confetti';
 
 interface HabitCardProps {
   habit: Habit;
@@ -26,6 +30,8 @@ interface HabitCardProps {
   onOpenResetModal: (habit: Habit) => void;
   onQuickStreakCheckin: (habit: Habit) => void;
   onUpdateCost?: (habitId: string, newCost: number) => void;
+  onSmokingUrge?: (outcome: 'resisted' | 'smoked') => void;
+  onUndoSmokingUrge?: (outcome: 'resisted' | 'smoked') => void;
 }
 
 export const HabitCard: React.FC<HabitCardProps> = ({
@@ -38,12 +44,15 @@ export const HabitCard: React.FC<HabitCardProps> = ({
   onOpenResetModal,
   onQuickStreakCheckin,
   onUpdateCost,
+  onSmokingUrge,
+  onUndoSmokingUrge,
 }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [isEditingCost, setIsEditingCost] = useState(false);
   const [costInput, setCostInput] = useState(String(habit.cost_per_day || 0));
 
-  const isStreak = habit.type === 'streak';
+  const isSmoking = habit.id === 'smoke_free';
+  const isStreak = habit.type === 'streak' && !isSmoking;
   const isLoggedToday = !!todayLog && todayLog.completed;
 
   // 戒斷型里程碑階級
@@ -61,6 +70,14 @@ export const HabitCard: React.FC<HabitCardProps> = ({
   const moneySaved = isStreak ? streakDays * (habit.cost_per_day || 0) : 0;
   const habitResets = resets.filter(r => r.habit_id === habit.id && r.reset_date !== null);
 
+  // 減害抗菸今日數據
+  const resistedCount = isSmoking ? Number(todayLog?.metrics?.resisted) || 0 : 0;
+  const smokedCount = isSmoking ? Number(todayLog?.metrics?.smoked) || 0 : 0;
+  const totalDecisions = resistedCount + smokedCount;
+  const resistanceRate = totalDecisions > 0 ? Math.round((resistedCount / totalDecisions) * 100) : 0;
+  const unitCost = habit.cost_per_day || 6.5;
+  const netSavedSmoking = Math.round((resistedCount - smokedCount) * unitCost * 10) / 10;
+
   const handleStreakCheckin = () => {
     if (!isLoggedToday) {
       triggerStreakMilestone(streakDays + 1);
@@ -77,12 +94,27 @@ export const HabitCard: React.FC<HabitCardProps> = ({
     setIsEditingCost(false);
   };
 
+  const handleResistSmoking = () => {
+    triggerUrgeResistedConfetti();
+    if (onSmokingUrge) {
+      onSmokingUrge('resisted');
+    }
+  };
+
+  const handleSmokeOne = () => {
+    if (onSmokingUrge) {
+      onSmokingUrge('smoked');
+    }
+  };
+
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 shadow-xl transition-all duration-300 hover:border-slate-700">
       {/* 頂部裝飾光暈 */}
       <div
         className={`absolute top-0 left-0 right-0 h-1 ${
-          isStreak
+          isSmoking
+            ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-500'
+            : isStreak
             ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500'
             : habit.id === 'running'
             ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
@@ -96,7 +128,9 @@ export const HabitCard: React.FC<HabitCardProps> = ({
           <div className="flex items-center gap-3">
             <div
               className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-inner ${
-                isStreak
+                isSmoking
+                  ? 'bg-teal-500/10 border-teal-500/20 text-teal-400'
+                  : isStreak
                   ? 'bg-orange-500/10 border-orange-500/20 text-orange-400'
                   : habit.id === 'running'
                   ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
@@ -108,6 +142,11 @@ export const HabitCard: React.FC<HabitCardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-lg text-white tracking-tight">{habit.name}</h3>
+                {isSmoking && (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
+                    減害對抗模式
+                  </span>
+                )}
                 {isStreak && (
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${milestone.color}`}>
                     {milestone.title}
@@ -115,7 +154,9 @@ export const HabitCard: React.FC<HabitCardProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-400">
-                {isStreak
+                {isSmoking
+                  ? '正念減害 · 每次抗癮省 NT$ ' + unitCost
+                  : isStreak
                   ? startDate
                     ? `起算於 ${new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' }).format(startDate)}`
                     : '每日自律戒斷'
@@ -128,7 +169,18 @@ export const HabitCard: React.FC<HabitCardProps> = ({
 
           {/* 右上角打卡狀態標記 */}
           <div>
-            {isLoggedToday ? (
+            {isSmoking ? (
+              totalDecisions > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  今日已對決 {totalDecisions} 次
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                  今日尚未記錄
+                </span>
+              )
+            ) : isLoggedToday ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-500/10">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 今日已簽到
@@ -141,8 +193,144 @@ export const HabitCard: React.FC<HabitCardProps> = ({
           </div>
         </div>
 
-        {/* 核心數據區塊 */}
-        {isStreak ? (
+        {/* 核心數據區塊：減害抗菸專屬對抗戰報 */}
+        {isSmoking ? (
+          <div className="my-4 space-y-3">
+            {/* 今日三格戰績指標 */}
+            <div className="grid grid-cols-3 gap-2.5">
+              {/* 抗菸成功次數 */}
+              <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-[11px] font-medium text-emerald-400">
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" /> 抗癮成功
+                  </span>
+                  {resistedCount > 0 && onUndoSmokingUrge && (
+                    <button
+                      onClick={() => onUndoSmokingUrge('resisted')}
+                      className="text-slate-500 hover:text-slate-300 p-0.5 rounded"
+                      title="倒扣 1 次"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono">{resistedCount}</span>
+                  <span className="text-[10px] text-slate-400">次</span>
+                </div>
+                <div className="text-[10px] text-emerald-300/80 mt-0.5 font-mono">
+                  +NT$ {(resistedCount * unitCost).toFixed(1)}
+                </div>
+              </div>
+
+              {/* 抽了一根次數 */}
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Cigarette className="w-3.5 h-3.5 text-amber-400" /> 抽了一根
+                  </span>
+                  {smokedCount > 0 && onUndoSmokingUrge && (
+                    <button
+                      onClick={() => onUndoSmokingUrge('smoked')}
+                      className="text-slate-500 hover:text-slate-300 p-0.5 rounded"
+                      title="倒扣 1 根"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-slate-300 font-mono">{smokedCount}</span>
+                  <span className="text-[10px] text-slate-400">根</span>
+                </div>
+                <div className="text-[10px] text-rose-400/80 mt-0.5 font-mono">
+                  -NT$ {(smokedCount * unitCost).toFixed(1)}
+                </div>
+              </div>
+
+              {/* 今日克制率 */}
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between">
+                <span className="text-[11px] font-medium text-slate-400">克制成功率</span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-teal-400 font-mono">
+                    {totalDecisions > 0 ? resistanceRate : '--'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">%</span>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  {totalDecisions > 0 ? `共面對 ${totalDecisions} 次` : '等待對決'}
+                </div>
+              </div>
+            </div>
+
+            {/* 今日淨省下金額橫條 */}
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-400">今日淨省下金額：</span>
+                <span
+                  className={`text-base font-extrabold font-mono ml-1.5 ${
+                    netSavedSmoking >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
+                >
+                  NT$ {netSavedSmoking > 0 ? `+${netSavedSmoking}` : netSavedSmoking}
+                </span>
+              </div>
+
+              {/* 單根金額修改 */}
+              {isEditingCost ? (
+                <form onSubmit={handleSaveCost} className="flex items-center gap-1">
+                  <span className="text-[10px] text-slate-400 font-mono">NT$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={costInput}
+                    onChange={(e) => setCostInput(e.target.value)}
+                    className="w-14 px-1 py-0.5 rounded bg-slate-900 border border-emerald-500 text-[11px] text-white font-mono focus:outline-none"
+                    autoFocus
+                  />
+                  <button type="submit" className="p-1 rounded bg-emerald-600 text-white">
+                    <Check className="w-2.5 h-2.5" />
+                  </button>
+                  <button type="button" onClick={() => setIsEditingCost(false)} className="p-1 rounded text-slate-400">
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </form>
+              ) : (
+                <button
+                  onClick={() => {
+                    setCostInput(String(habit.cost_per_day || 6.5));
+                    setIsEditingCost(true);
+                  }}
+                  className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400"
+                  title="點此修改單根菸價格"
+                >
+                  <span>單根 NT$ {habit.cost_per_day}</span>
+                  <Edit2 className="w-2.5 h-2.5 opacity-60 text-emerald-400" />
+                </button>
+              )}
+            </div>
+
+            {/* 雙核心即時按鈕 */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                onClick={handleResistSmoking}
+                className="py-3 px-3 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 transition-all active:scale-[0.97]"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                抗菸成功 💪 (+${unitCost})
+              </button>
+
+              <button
+                onClick={handleSmokeOne}
+                className="py-3 px-3 rounded-xl font-semibold text-xs sm:text-sm bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center gap-1.5 transition-all active:scale-[0.97]"
+              >
+                <Cigarette className="w-4 h-4 text-amber-400" />
+                抽了一根 🚬 (-${unitCost})
+              </button>
+            </div>
+          </div>
+        ) : isStreak ? (
           <div className="my-4">
             <div className="grid grid-cols-2 gap-3">
               {/* 連勝天數 */}
