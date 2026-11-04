@@ -50,76 +50,58 @@ export function getLocalDateString(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-// 初始化本機預設種子資料 (避免初次開啟空空如也)
+// 乾淨全新的戒斷起算點 (從現在此時此刻開始)
 function getInitialStreakResets(): StreakReset[] {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-  const fortyFiveDaysAgo = new Date();
-  fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
-
+  const now = new Date().toISOString();
   return [
     {
       id: 'init-sober',
       habit_id: 'sober',
-      start_date: thirtyDaysAgo.toISOString(),
+      start_date: now,
       reset_date: null,
       trigger_reason: null,
     },
     {
       id: 'init-smoke-free',
       habit_id: 'smoke_free',
-      start_date: fortyFiveDaysAgo.toISOString(),
+      start_date: now,
       reset_date: null,
       trigger_reason: null,
     },
   ];
 }
 
-// 產生最近兩週的幾筆範例打卡記錄
+// 初始打卡日誌：預設為空，由使用者全新開始打卡
 function getInitialLogs(): HabitLog[] {
-  const logs: HabitLog[] = [];
-  const today = new Date();
+  return [];
+}
 
-  // 跑步範例記錄
-  for (let i of [1, 3, 6, 8, 11]) {
-    const d = new Date();
-    d.setDate(today.getDate() - i);
-    logs.push({
-      id: `seed-run-${i}`,
-      habit_id: 'running',
-      log_date: getLocalDateString(d),
-      completed: true,
-      value: 5.2 + (i % 3),
-      metrics: { duration: 32 + i * 2, pace: '5:45' },
-      note: i === 1 ? '晨跑河濱，節奏舒暢' : '夜跑放鬆',
-    });
-  }
-
-  // 重訓範例記錄
-  for (let i of [2, 4, 7, 9]) {
-    const d = new Date();
-    d.setDate(today.getDate() - i);
-    logs.push({
-      id: `seed-gym-${i}`,
-      habit_id: 'workout',
-      log_date: getLocalDateString(d),
-      completed: true,
-      value: 16,
-      metrics: {
-        totalSets: 16,
-        exercises: [
-          { id: '1', name: '深蹲', weight: 80, sets: 4, reps: 8 },
-          { id: '2', name: '臥推', weight: 65, sets: 4, reps: 10 },
-          { id: '3', name: '引體向上', weight: 0, sets: 4, reps: 8 },
-          { id: '4', name: '羅馬尼亞硬舉', weight: 70, sets: 4, reps: 10 },
-        ]
+// 自動遷移檢查：確保清除舊版 30/45 天的範例種子，歸零為真實起點
+export function checkAndMigrateCleanSlate() {
+  const isMigrated = localStorage.getItem('habitpulse_clean_v1');
+  if (!isMigrated) {
+    const now = new Date().toISOString();
+    const cleanResets: StreakReset[] = [
+      {
+        id: 'init-sober',
+        habit_id: 'sober',
+        start_date: now,
+        reset_date: null,
+        trigger_reason: null,
       },
-      note: '胸背腿綜合訓練',
-    });
+      {
+        id: 'init-smoke-free',
+        habit_id: 'smoke_free',
+        start_date: now,
+        reset_date: null,
+        trigger_reason: null,
+      },
+    ];
+    localStorage.setItem(STORAGE_KEYS.RESETS, JSON.stringify(cleanResets));
+    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
+    localStorage.setItem('habitpulse_clean_v1', 'true');
+    window.dispatchEvent(new Event('habitpulse_sync'));
   }
-
-  return logs;
 }
 
 // 讀取 Habits
@@ -148,8 +130,27 @@ export async function getHabits(): Promise<Habit[]> {
   return DEFAULT_HABITS;
 }
 
+// 更新習慣自訂金額 (例如不喝酒/不抽菸每日省下花費)
+export async function updateHabitCost(habitId: string, costPerDay: number): Promise<void> {
+  const habits = await getHabits();
+  const updated = habits.map(h => (h.id === habitId ? { ...h, cost_per_day: costPerDay } : h));
+  localStorage.setItem(STORAGE_KEYS.HABITS, JSON.stringify(updated));
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      await supabase.from('habits').update({ cost_per_day: costPerDay }).eq('id', habitId);
+    } catch (e) {
+      console.warn('[HabitPulse] Supabase updateHabitCost error', e);
+    }
+  }
+
+  window.dispatchEvent(new Event('habitpulse_sync'));
+}
+
 // 讀取 Logs
 export async function getLogs(): Promise<HabitLog[]> {
+  checkAndMigrateCleanSlate();
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -177,6 +178,7 @@ export async function getLogs(): Promise<HabitLog[]> {
 
 // 讀取 Streak Resets
 export async function getStreakResets(): Promise<StreakReset[]> {
+  checkAndMigrateCleanSlate();
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -224,7 +226,6 @@ export async function saveHabitLog(log: Omit<HabitLog, 'id'> & { id?: string }):
         .select()
         .single();
       if (!error && data) {
-        // 同步至 local
         updateLocalLog(data as HabitLog);
         return data as HabitLog;
       }
@@ -308,6 +309,44 @@ function updateLocalReset(reset: StreakReset) {
   let resets: StreakReset[] = local ? JSON.parse(local) : [];
   resets.unshift(reset);
   localStorage.setItem(STORAGE_KEYS.RESETS, JSON.stringify(resets));
+  window.dispatchEvent(new Event('habitpulse_sync'));
+}
+
+// 一鍵清除所有資料，重新由第 0 天起算
+export async function resetAllToCleanSlate(): Promise<void> {
+  const now = new Date().toISOString();
+  const cleanResets: StreakReset[] = [
+    {
+      id: 'init-sober',
+      habit_id: 'sober',
+      start_date: now,
+      reset_date: null,
+      trigger_reason: null,
+    },
+    {
+      id: 'init-smoke-free',
+      habit_id: 'smoke_free',
+      start_date: now,
+      reset_date: null,
+      trigger_reason: null,
+    },
+  ];
+
+  localStorage.setItem(STORAGE_KEYS.RESETS, JSON.stringify(cleanResets));
+  localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
+  localStorage.setItem('habitpulse_clean_v1', 'true');
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      await supabase.from('habit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('streak_resets').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('streak_resets').insert(cleanResets);
+    } catch (e) {
+      console.warn('[HabitPulse] Supabase resetAllToCleanSlate error', e);
+    }
+  }
+
   window.dispatchEvent(new Event('habitpulse_sync'));
 }
 

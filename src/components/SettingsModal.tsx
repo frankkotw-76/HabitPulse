@@ -1,27 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Database,
   Check,
   Copy,
   Download,
-  Upload,
   RefreshCw,
   ExternalLink,
-  ShieldCheck,
   AlertCircle,
+  Coins,
+  RotateCcw,
 } from 'lucide-react';
+import { Habit } from '../types/habit';
 import { getSupabaseConfig, saveCustomSupabaseConfig, getSupabase } from '../lib/supabase';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  habits: Habit[];
+  onUpdateCost: (habitId: string, cost: number) => Promise<void>;
+  onResetAllData: () => Promise<void>;
   onRefreshData: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
+  habits,
+  onUpdateCost,
+  onResetAllData,
   onRefreshData,
 }) => {
   if (!isOpen) return null;
@@ -32,6 +39,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
   const [copiedSql, setCopiedSql] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
+  // 習慣自訂每日花費
+  const soberHabit = habits.find((h) => h.id === 'sober');
+  const smokeHabit = habits.find((h) => h.id === 'smoke_free');
+  const [soberCost, setSoberCost] = useState(String(soberHabit?.cost_per_day ?? 250));
+  const [smokeCost, setSmokeCost] = useState(String(smokeHabit?.cost_per_day ?? 150));
+  const [costSavedMsg, setCostSavedMsg] = useState(false);
+
+  const handleSaveCosts = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const sCost = Math.max(0, parseFloat(soberCost) || 0);
+    const smCost = Math.max(0, parseFloat(smokeCost) || 0);
+    await onUpdateCost('sober', sCost);
+    await onUpdateCost('smoke_free', smCost);
+    setCostSavedMsg(true);
+    setTimeout(() => setCostSavedMsg(false), 2000);
+  };
 
   const handleTestAndSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }
 
       // 嘗試讀取 habits
-      const { data, error } = await client.from('habits').select('id').limit(1);
+      const { error } = await client.from('habits').select('id').limit(1);
 
       if (error) {
         setTestStatus('error');
@@ -72,6 +98,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTestStatus('idle');
     setStatusMessage('已切換回純本機離線模式');
     onRefreshData();
+  };
+
+  const handleResetCleanSlate = async () => {
+    if (window.confirm('確定要清空所有範例紀錄，並將連勝天數由【第 0 天】全新開始嗎？')) {
+      setIsResetting(true);
+      await onResetAllData();
+      setIsResetting(false);
+      setResetSuccess(true);
+      setTimeout(() => setResetSuccess(false), 3000);
+    }
   };
 
   const sqlQuickCode = `-- 快速在 Supabase SQL Editor 執行以建立 HabitPulse 資料表
@@ -157,8 +193,8 @@ alter publication supabase_realtime add table streak_resets;`;
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">系統設定與雲端同步</h2>
-              <p className="text-xs text-slate-400">跨裝置即時同步 (Supabase Realtime) 與備份</p>
+              <h2 className="text-base font-bold text-white">系統設定與自訂花費</h2>
+              <p className="text-xs text-slate-400">調整每日省下金額、資料歸零與雲端同步</p>
             </div>
           </div>
           <button
@@ -171,8 +207,90 @@ alter publication supabase_realtime add table streak_resets;`;
 
         {/* Body */}
         <div className="p-4 space-y-5 overflow-y-auto flex-1">
+          {/* 自訂每日省下花費金額 */}
+          <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-emerald-400" />
+                自訂戒斷每日省下花費 (NT$)
+              </span>
+              {costSavedMsg && (
+                <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
+                  <Check className="w-3.5 h-3.5" /> 已更新金額
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
+              系統會依據<strong>【連勝堅持天數 × 每日設定花費】</strong>即時計算您省下的財富。可隨時按您平時的菸酒消費習慣修改：
+            </p>
+
+            <form onSubmit={handleSaveCosts} className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-300 mb-1">
+                    🍷 不喝酒每日省下 (NT$)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={soberCost}
+                    onChange={(e) => setSoberCost(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-750 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500">預設 NT$ 250 (約1~2杯啤酒調酒)</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-300 mb-1">
+                    🚭 不抽菸每日省下 (NT$)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={smokeCost}
+                    onChange={(e) => setSmokeCost(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-750 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500">預設 NT$ 150 (約1包菸)</span>
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-emerald-600/80 hover:bg-emerald-600 text-white transition-colors"
+              >
+                儲存每日省下金額
+              </button>
+            </form>
+          </div>
+
+          {/* 清空所有預設資料，由第 0 天全新起算 */}
+          <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
+                清空資料 · 由第 0 天全新起算
+              </span>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                清除所有舊有打卡與連勝種子，讓所有習慣從今天此時此刻開始起跑。
+              </p>
+              {resetSuccess && (
+                <p className="text-[11px] text-emerald-400 mt-1 font-semibold">
+                  ✓ 已成功歸零，所有習慣由今天第 0 天起算！
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleResetCleanSlate}
+              disabled={isResetting}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-500/30 shrink-0 ml-3 transition-colors"
+            >
+              {isResetting ? '清空中...' : '全新起算'}
+            </button>
+          </div>
+
           {/* Supabase 連線設定 */}
-          <form onSubmit={handleTestAndSave} className="space-y-3">
+          <form onSubmit={handleTestAndSave} className="space-y-3 pt-2 border-t border-slate-800">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-200">Supabase 專案 API 設定</span>
               <a

@@ -6,6 +6,8 @@ import {
   getStreakResets,
   saveHabitLog,
   resetStreak,
+  updateHabitCost,
+  resetAllToCleanSlate,
   subscribeToRealtime,
   getLocalDateString,
   calculateStreak,
@@ -24,11 +26,8 @@ import {
   Footprints,
   Dumbbell,
   DollarSign,
-  TrendingUp,
-  Sparkles,
   RefreshCw,
 } from 'lucide-react';
-import { triggerStreakMilestone } from './lib/confetti';
 
 export function App() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -117,6 +116,18 @@ export function App() {
   // 破戒重置
   const handleConfirmReset = async (habitId: string, reason: string) => {
     await resetStreak(habitId, reason);
+    await loadData();
+  };
+
+  // 修改每日省下花費
+  const handleUpdateHabitCost = async (habitId: string, cost: number) => {
+    await updateHabitCost(habitId, cost);
+    await loadData();
+  };
+
+  // 清空為全新起點
+  const handleResetAllData = async () => {
+    await resetAllToCleanSlate();
     await loadData();
   };
 
@@ -231,6 +242,7 @@ export function App() {
                         }
                         onOpenResetModal={(h) => setResetModal({ isOpen: true, habit: h })}
                         onQuickStreakCheckin={handleQuickStreakCheckin}
+                        onUpdateCost={handleUpdateHabitCost}
                       />
                     );
                   })}
@@ -276,6 +288,9 @@ export function App() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        habits={habits}
+        onUpdateCost={handleUpdateHabitCost}
+        onResetAllData={handleResetAllData}
         onRefreshData={loadData}
       />
     </div>

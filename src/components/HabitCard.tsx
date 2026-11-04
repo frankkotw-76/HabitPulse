@@ -6,14 +6,15 @@ import {
   CheckCircle2,
   AlertCircle,
   History,
-  TrendingUp,
   DollarSign,
   ChevronDown,
   ChevronUp,
   PlusCircle,
-  Award,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
-import { triggerCelebration, triggerStreakMilestone } from '../lib/confetti';
+import { triggerStreakMilestone } from '../lib/confetti';
 
 interface HabitCardProps {
   habit: Habit;
@@ -24,6 +25,7 @@ interface HabitCardProps {
   onOpenLogModal: (habit: Habit, existingLog?: HabitLog) => void;
   onOpenResetModal: (habit: Habit) => void;
   onQuickStreakCheckin: (habit: Habit) => void;
+  onUpdateCost?: (habitId: string, newCost: number) => void;
 }
 
 export const HabitCard: React.FC<HabitCardProps> = ({
@@ -35,8 +37,12 @@ export const HabitCard: React.FC<HabitCardProps> = ({
   onOpenLogModal,
   onOpenResetModal,
   onQuickStreakCheckin,
+  onUpdateCost,
 }) => {
   const [showHistory, setShowHistory] = useState(false);
+  const [isEditingCost, setIsEditingCost] = useState(false);
+  const [costInput, setCostInput] = useState(String(habit.cost_per_day || 0));
+
   const isStreak = habit.type === 'streak';
   const isLoggedToday = !!todayLog && todayLog.completed;
 
@@ -60,6 +66,15 @@ export const HabitCard: React.FC<HabitCardProps> = ({
       triggerStreakMilestone(streakDays + 1);
       onQuickStreakCheckin(habit);
     }
+  };
+
+  const handleSaveCost = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const val = Math.max(0, parseFloat(costInput) || 0);
+    if (onUpdateCost) {
+      onUpdateCost(habit.id, val);
+    }
+    setIsEditingCost(false);
   };
 
   return (
@@ -153,7 +168,49 @@ export const HabitCard: React.FC<HabitCardProps> = ({
                     NT$ {moneySaved.toLocaleString()}
                   </span>
                 </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">每日約省 NT$ {habit.cost_per_day}</div>
+
+                {/* 每日省下金額自訂 */}
+                {isEditingCost ? (
+                  <form onSubmit={handleSaveCost} className="flex items-center gap-1 mt-1">
+                    <span className="text-[10px] text-slate-400 font-mono">NT$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="10"
+                      value={costInput}
+                      onChange={(e) => setCostInput(e.target.value)}
+                      className="w-14 px-1 py-0.5 rounded bg-slate-900 border border-emerald-500 text-[11px] text-white font-mono focus:outline-none"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                      title="儲存"
+                    >
+                      <Check className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingCost(false)}
+                      className="p-1 rounded text-slate-400 hover:text-white"
+                      title="取消"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setCostInput(String(habit.cost_per_day || 0));
+                      setIsEditingCost(true);
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-emerald-400 mt-0.5 group text-left transition-colors"
+                    title="點此修改每日省下的自訂花費金額"
+                  >
+                    <span>每日約省 NT$ {habit.cost_per_day}</span>
+                    <Edit2 className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 text-emerald-400" />
+                  </button>
+                )}
               </div>
             </div>
 
