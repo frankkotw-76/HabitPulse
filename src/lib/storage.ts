@@ -20,11 +20,11 @@ export const DEFAULT_HABITS: Habit[] = [
   },
   {
     id: 'sober',
-    name: '不喝酒',
+    name: '節制抗酒',
     type: 'streak',
     icon: 'WineOff',
-    unit: null,
-    cost_per_day: 250, // 每日省下 $250
+    unit: '瓶',
+    cost_per_day: 50, // 單瓶預設 NT$ 50
   },
   {
     id: 'smoke_free',
@@ -76,7 +76,7 @@ function getInitialLogs(): HabitLog[] {
   return [];
 }
 
-// 自動遷移檢查：確保清除舊版種子並套用抗菸減害模式
+// 自動遷移檢查：清除舊版種子並套用抗菸與抗酒衝動對決模式
 export function checkAndMigrateCleanSlate() {
   const isMigrated = localStorage.getItem('habitpulse_clean_v1');
   if (!isMigrated) {
@@ -103,9 +103,9 @@ export function checkAndMigrateCleanSlate() {
     window.dispatchEvent(new Event('habitpulse_sync'));
   }
 
-  // 遷移抗菸模式 (單根 6.5 元)
-  const smokingMigrated = localStorage.getItem('habitpulse_smoke_urge_v2');
-  if (!smokingMigrated) {
+  // 遷移抗酒與抗菸衝動模式 (酒:單瓶50元, 菸:單根6.5元)
+  const urgeMigrated = localStorage.getItem('habitpulse_urge_mode_v3');
+  if (!urgeMigrated) {
     const localHabits = localStorage.getItem(STORAGE_KEYS.HABITS);
     if (localHabits) {
       try {
@@ -114,12 +114,15 @@ export function checkAndMigrateCleanSlate() {
           if (h.id === 'smoke_free') {
             return { ...h, name: '減害抗菸', unit: '根', cost_per_day: 6.5 };
           }
+          if (h.id === 'sober') {
+            return { ...h, name: '節制抗酒', unit: '瓶', cost_per_day: 50 };
+          }
           return h;
         });
         localStorage.setItem(STORAGE_KEYS.HABITS, JSON.stringify(habits));
       } catch (_) {}
     }
-    localStorage.setItem('habitpulse_smoke_urge_v2', 'true');
+    localStorage.setItem('habitpulse_urge_mode_v3', 'true');
     window.dispatchEvent(new Event('habitpulse_sync'));
   }
 }
@@ -151,7 +154,7 @@ export async function getHabits(): Promise<Habit[]> {
   return DEFAULT_HABITS;
 }
 
-// 更新習慣自訂金額 (例如不喝酒/不抽菸每日省下花費或單根花費)
+// 更新習慣自訂金額 (例如單瓶酒/單根菸花費)
 export async function updateHabitCost(habitId: string, costPerDay: number): Promise<void> {
   const habits = await getHabits();
   const updated = habits.map(h => (h.id === habitId ? { ...h, cost_per_day: costPerDay } : h));
@@ -272,68 +275,82 @@ function updateLocalLog(log: HabitLog) {
   window.dispatchEvent(new Event('habitpulse_sync'));
 }
 
-// 減害抗菸對決記錄 (抗菸成功 vs 抽了一根)
-export async function recordSmokingUrge(outcome: 'resisted' | 'smoked'): Promise<HabitLog> {
+// 衝動對抗記錄 (抗癮成功 vs 忍不住消費) - 支援煙與酒
+export async function recordUrge(
+  habitId: 'smoke_free' | 'sober',
+  outcome: 'resisted' | 'consumed'
+): Promise<HabitLog> {
   const todayStr = getLocalDateString();
   const logs = await getLogs();
-  const existing = logs.find(l => l.habit_id === 'smoke_free' && l.log_date === todayStr);
+  const existing = logs.find(l => l.habit_id === habitId && l.log_date === todayStr);
 
   const prevResisted = Number(existing?.metrics?.resisted) || 0;
-  const prevSmoked = Number(existing?.metrics?.smoked) || 0;
+  const prevConsumed = Number(existing?.metrics?.consumed) || 0;
 
   const newResisted = outcome === 'resisted' ? prevResisted + 1 : prevResisted;
-  const newSmoked = outcome === 'smoked' ? prevSmoked + 1 : prevSmoked;
+  const newConsumed = outcome === 'consumed' ? prevConsumed + 1 : prevConsumed;
 
-  const habit = (await getHabits()).find(h => h.id === 'smoke_free');
-  const costPerUnit = habit?.cost_per_day || 6.5;
-  const netSaved = Math.round((newResisted - newSmoked) * costPerUnit * 10) / 10;
+  const habit = (await getHabits()).find(h => h.id === habitId);
+  const costPerUnit = habit?.cost_per_day ?? (habitId === 'sober' ? 50 : 6.5);
+  const netSaved = Math.round((newResisted - newConsumed) * costPerUnit * 10) / 10;
+  const unitLabel = habit?.unit || (habitId === 'sober' ? '瓶' : '根');
 
   return await saveHabitLog({
     id: existing?.id,
-    habit_id: 'smoke_free',
+    habit_id: habitId,
     log_date: todayStr,
     completed: true,
     value: netSaved,
     metrics: {
       resisted: newResisted,
-      smoked: newSmoked,
+      consumed: newConsumed,
       netSaved: netSaved,
     },
-    note: `抵抗 ${newResisted} 次，抽了 ${newSmoked} 根`,
+    note: `抵抗 ${newResisted} 次，使用 ${newConsumed} ${unitLabel}`,
   });
 }
 
-// 減害抗菸倒扣/復原 (防止手滑誤點)
-export async function undoSmokingUrge(outcome: 'resisted' | 'smoked'): Promise<HabitLog | null> {
+// 衝動對抗倒扣/復原 (防止手滑誤點)
+export async function undoUrge(
+  habitId: 'smoke_free' | 'sober',
+  outcome: 'resisted' | 'consumed'
+): Promise<HabitLog | null> {
   const todayStr = getLocalDateString();
   const logs = await getLogs();
-  const existing = logs.find(l => l.habit_id === 'smoke_free' && l.log_date === todayStr);
+  const existing = logs.find(l => l.habit_id === habitId && l.log_date === todayStr);
   if (!existing) return null;
 
   const prevResisted = Number(existing.metrics?.resisted) || 0;
-  const prevSmoked = Number(existing.metrics?.smoked) || 0;
+  const prevConsumed = Number(existing.metrics?.consumed) || 0;
 
   const newResisted = outcome === 'resisted' ? Math.max(0, prevResisted - 1) : prevResisted;
-  const newSmoked = outcome === 'smoked' ? Math.max(0, prevSmoked - 1) : prevSmoked;
+  const newConsumed = outcome === 'consumed' ? Math.max(0, prevConsumed - 1) : prevConsumed;
 
-  const habit = (await getHabits()).find(h => h.id === 'smoke_free');
-  const costPerUnit = habit?.cost_per_day || 6.5;
-  const netSaved = Math.round((newResisted - newSmoked) * costPerUnit * 10) / 10;
+  const habit = (await getHabits()).find(h => h.id === habitId);
+  const costPerUnit = habit?.cost_per_day ?? (habitId === 'sober' ? 50 : 6.5);
+  const netSaved = Math.round((newResisted - newConsumed) * costPerUnit * 10) / 10;
+  const unitLabel = habit?.unit || (habitId === 'sober' ? '瓶' : '根');
 
   return await saveHabitLog({
     id: existing.id,
-    habit_id: 'smoke_free',
+    habit_id: habitId,
     log_date: todayStr,
-    completed: newResisted > 0 || newSmoked > 0,
+    completed: newResisted > 0 || newConsumed > 0,
     value: netSaved,
     metrics: {
       resisted: newResisted,
-      smoked: newSmoked,
+      consumed: newConsumed,
       netSaved: netSaved,
     },
-    note: `抵抗 ${newResisted} 次，抽了 ${newSmoked} 根`,
+    note: `抵抗 ${newResisted} 次，使用 ${newConsumed} ${unitLabel}`,
   });
 }
+
+// 舊版別名相容
+export const recordSmokingUrge = (outcome: 'resisted' | 'smoked') =>
+  recordUrge('smoke_free', outcome === 'resisted' ? 'resisted' : 'consumed');
+export const undoSmokingUrge = (outcome: 'resisted' | 'smoked') =>
+  undoUrge('smoke_free', outcome === 'resisted' ? 'resisted' : 'consumed');
 
 // 刪除打卡日誌
 export async function deleteHabitLog(habitId: string, logDate: string): Promise<void> {
@@ -419,7 +436,7 @@ export async function resetAllToCleanSlate(): Promise<void> {
   localStorage.setItem(STORAGE_KEYS.RESETS, JSON.stringify(cleanResets));
   localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify([]));
   localStorage.setItem('habitpulse_clean_v1', 'true');
-  localStorage.setItem('habitpulse_smoke_urge_v2', 'true');
+  localStorage.setItem('habitpulse_urge_mode_v3', 'true');
 
   const supabase = getSupabase();
   if (supabase) {

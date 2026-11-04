@@ -1,6 +1,5 @@
 import React from 'react';
 import { Habit, HabitLog, StreakReset } from '../types/habit';
-import { calculateStreak } from '../lib/storage';
 import {
   DollarSign,
   TrendingUp,
@@ -20,23 +19,24 @@ interface MoneySavedBannerProps {
   resets: StreakReset[];
 }
 
-export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs, resets }) => {
-  // 不喝酒計算
+export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs }) => {
+  // 節制抗酒計算 (抵抗瓶數 - 喝了瓶數) * 單瓶花費
   const soberHabit = habits.find((h) => h.id === 'sober');
-  const soberStreak = calculateStreak('sober', resets);
-  const soberCost = soberHabit?.cost_per_day || 250;
-  const soberSaved = soberStreak.days * soberCost;
+  const soberLogs = logs.filter((l) => l.habit_id === 'sober');
+  const soberResisted = soberLogs.reduce((acc, l) => acc + (Number(l.metrics?.resisted) || 0), 0);
+  const soberConsumed = soberLogs.reduce((acc, l) => acc + (Number(l.metrics?.consumed) || 0), 0);
+  const soberCost = soberHabit?.cost_per_day ?? 50;
+  const soberSaved = Math.max(0, Math.round((soberResisted - soberConsumed) * soberCost * 10) / 10);
 
   // 減害抗菸計算 (抵抗次數 - 抽菸根數) * 單根花費
   const smokeHabit = habits.find((h) => h.id === 'smoke_free');
   const smokeLogs = logs.filter((l) => l.habit_id === 'smoke_free');
-  const totalResisted = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.resisted) || 0), 0);
-  const totalSmoked = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.smoked) || 0), 0);
-  const smokeCost = smokeHabit?.cost_per_day || 6.5;
-  const smokeSaved = Math.max(0, Math.round((totalResisted - totalSmoked) * smokeCost * 10) / 10);
+  const smokeResisted = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.resisted) || 0), 0);
+  const smokeConsumed = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.consumed ?? l.metrics?.smoked) || 0), 0);
+  const smokeCost = smokeHabit?.cost_per_day ?? 6.5;
+  const smokeSaved = Math.max(0, Math.round((smokeResisted - smokeConsumed) * smokeCost * 10) / 10);
 
   const totalMoneySaved = Math.round(soberSaved + smokeSaved);
-  const totalDailyPace = soberCost; // 每日持續省下的基礎額度
 
   // 里程碑對照
   const milestones = [
@@ -63,7 +63,7 @@ export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs
         <div className="relative z-10">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-1">
             <ShieldCheck className="w-4 h-4" />
-            戒斷與減害自由財富積累
+            減害自律自由財富積累
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 mb-3">
@@ -71,7 +71,7 @@ export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs
               NT$ {totalMoneySaved.toLocaleString()}
             </span>
             <span className="text-xs text-emerald-300 font-medium">
-              每一次抗癮與自律都在為自己創造實質財富
+              每一次克制少喝、少抽都在為自己創造實質財富
             </span>
           </div>
 
@@ -107,26 +107,26 @@ export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs
 
       {/* 習慣個別貢獻清單 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* 不喝酒 */}
+        {/* 節制抗酒 */}
         {soberHabit && (
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
             <div>
               <div className="text-sm font-bold text-white flex items-center gap-2">
-                <Wine className="w-4 h-4 text-orange-400" />
-                不喝酒
+                <Wine className="w-4 h-4 text-amber-400" />
+                節制抗酒
                 <span className="text-xs font-normal text-slate-400 font-mono">
-                  (堅持 {soberStreak.days} 天)
+                  (抗癮 {soberResisted} 次 / 喝 {soberConsumed} 瓶)
                 </span>
               </div>
               <div className="text-xs text-slate-400 mt-0.5">
-                每日省下 NT$ {soberCost}
+                單瓶克制省 NT$ {soberCost}
               </div>
             </div>
             <div className="text-right">
               <div className="text-base font-extrabold text-emerald-400 font-mono">
                 NT$ {soberSaved.toLocaleString()}
               </div>
-              <div className="text-[10px] text-slate-500">累計貢獻</div>
+              <div className="text-[10px] text-slate-500">淨省下金額</div>
             </div>
           </div>
         )}
@@ -139,7 +139,7 @@ export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs
                 <Cigarette className="w-4 h-4 text-teal-400" />
                 減害抗菸
                 <span className="text-xs font-normal text-slate-400 font-mono">
-                  (抗癮 {totalResisted} 次 / 抽 {totalSmoked} 根)
+                  (抗癮 {smokeResisted} 次 / 抽 {smokeConsumed} 根)
                 </span>
               </div>
               <div className="text-xs text-slate-400 mt-0.5">
@@ -169,7 +169,7 @@ export const MoneySavedBanner: React.FC<MoneySavedBannerProps> = ({ habits, logs
             { days: 365, label: '滿 1 年' },
             { days: 1095, label: '滿 3 年' },
           ].map(({ days, label }) => {
-            const projected = days * (totalDailyPace + (smokeCost * 10)); // 假設每天少抽半包
+            const projected = days * (soberCost * 2 + smokeCost * 10); // 假設每天少喝2瓶、少抽半包
             return (
               <div key={days} className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
                 <span className="text-[11px] text-slate-400">{label}</span>

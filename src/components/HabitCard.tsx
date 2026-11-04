@@ -15,7 +15,7 @@ import {
   X,
   ShieldCheck,
   Cigarette,
-  Sparkles,
+  Wine,
   Minus,
 } from 'lucide-react';
 import { triggerStreakMilestone, triggerUrgeResistedConfetti } from '../lib/confetti';
@@ -30,8 +30,8 @@ interface HabitCardProps {
   onOpenResetModal: (habit: Habit) => void;
   onQuickStreakCheckin: (habit: Habit) => void;
   onUpdateCost?: (habitId: string, newCost: number) => void;
-  onSmokingUrge?: (outcome: 'resisted' | 'smoked') => void;
-  onUndoSmokingUrge?: (outcome: 'resisted' | 'smoked') => void;
+  onUrgeAction?: (habitId: string, outcome: 'resisted' | 'consumed') => void;
+  onUndoUrgeAction?: (habitId: string, outcome: 'resisted' | 'consumed') => void;
 }
 
 export const HabitCard: React.FC<HabitCardProps> = ({
@@ -44,15 +44,17 @@ export const HabitCard: React.FC<HabitCardProps> = ({
   onOpenResetModal,
   onQuickStreakCheckin,
   onUpdateCost,
-  onSmokingUrge,
-  onUndoSmokingUrge,
+  onUrgeAction,
+  onUndoUrgeAction,
 }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [isEditingCost, setIsEditingCost] = useState(false);
   const [costInput, setCostInput] = useState(String(habit.cost_per_day || 0));
 
   const isSmoking = habit.id === 'smoke_free';
-  const isStreak = habit.type === 'streak' && !isSmoking;
+  const isAlcohol = habit.id === 'sober';
+  const isUrgeTracking = isSmoking || isAlcohol;
+  const isStreak = habit.type === 'streak' && !isUrgeTracking;
   const isLoggedToday = !!todayLog && todayLog.completed;
 
   // 戒斷型里程碑階級
@@ -70,13 +72,18 @@ export const HabitCard: React.FC<HabitCardProps> = ({
   const moneySaved = isStreak ? streakDays * (habit.cost_per_day || 0) : 0;
   const habitResets = resets.filter(r => r.habit_id === habit.id && r.reset_date !== null);
 
-  // 減害抗菸今日數據
-  const resistedCount = isSmoking ? Number(todayLog?.metrics?.resisted) || 0 : 0;
-  const smokedCount = isSmoking ? Number(todayLog?.metrics?.smoked) || 0 : 0;
-  const totalDecisions = resistedCount + smokedCount;
+  // 衝動對決今日數據 (支援菸與酒)
+  const resistedCount = isUrgeTracking
+    ? Number(todayLog?.metrics?.resisted) || 0
+    : 0;
+  const consumedCount = isUrgeTracking
+    ? Number(todayLog?.metrics?.consumed ?? todayLog?.metrics?.smoked) || 0
+    : 0;
+  const totalDecisions = resistedCount + consumedCount;
   const resistanceRate = totalDecisions > 0 ? Math.round((resistedCount / totalDecisions) * 100) : 0;
-  const unitCost = habit.cost_per_day || 6.5;
-  const netSavedSmoking = Math.round((resistedCount - smokedCount) * unitCost * 10) / 10;
+  const unitCost = habit.cost_per_day ?? (isAlcohol ? 50 : 6.5);
+  const netSavedUrge = Math.round((resistedCount - consumedCount) * unitCost * 10) / 10;
+  const unitName = habit.unit || (isAlcohol ? '瓶' : '根');
 
   const handleStreakCheckin = () => {
     if (!isLoggedToday) {
@@ -94,16 +101,16 @@ export const HabitCard: React.FC<HabitCardProps> = ({
     setIsEditingCost(false);
   };
 
-  const handleResistSmoking = () => {
+  const handleResist = () => {
     triggerUrgeResistedConfetti();
-    if (onSmokingUrge) {
-      onSmokingUrge('resisted');
+    if (onUrgeAction) {
+      onUrgeAction(habit.id, 'resisted');
     }
   };
 
-  const handleSmokeOne = () => {
-    if (onSmokingUrge) {
-      onSmokingUrge('smoked');
+  const handleConsume = () => {
+    if (onUrgeAction) {
+      onUrgeAction(habit.id, 'consumed');
     }
   };
 
@@ -112,7 +119,9 @@ export const HabitCard: React.FC<HabitCardProps> = ({
       {/* 頂部裝飾光暈 */}
       <div
         className={`absolute top-0 left-0 right-0 h-1 ${
-          isSmoking
+          isAlcohol
+            ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-emerald-400'
+            : isSmoking
             ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-500'
             : isStreak
             ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500'
@@ -128,7 +137,9 @@ export const HabitCard: React.FC<HabitCardProps> = ({
           <div className="flex items-center gap-3">
             <div
               className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-inner ${
-                isSmoking
+                isAlcohol
+                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                  : isSmoking
                   ? 'bg-teal-500/10 border-teal-500/20 text-teal-400'
                   : isStreak
                   ? 'bg-orange-500/10 border-orange-500/20 text-orange-400'
@@ -142,7 +153,7 @@ export const HabitCard: React.FC<HabitCardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-lg text-white tracking-tight">{habit.name}</h3>
-                {isSmoking && (
+                {isUrgeTracking && (
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
                     減害對抗模式
                   </span>
@@ -154,8 +165,8 @@ export const HabitCard: React.FC<HabitCardProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-400">
-                {isSmoking
-                  ? '正念減害 · 每次抗癮省 NT$ ' + unitCost
+                {isUrgeTracking
+                  ? `正念減害 · 每次少喝/少抽省 NT$ ${unitCost}`
                   : isStreak
                   ? startDate
                     ? `起算於 ${new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric' }).format(startDate)}`
@@ -169,7 +180,7 @@ export const HabitCard: React.FC<HabitCardProps> = ({
 
           {/* 右上角打卡狀態標記 */}
           <div>
-            {isSmoking ? (
+            {isUrgeTracking ? (
               totalDecisions > 0 ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   <ShieldCheck className="w-3.5 h-3.5" />
@@ -193,20 +204,20 @@ export const HabitCard: React.FC<HabitCardProps> = ({
           </div>
         </div>
 
-        {/* 核心數據區塊：減害抗菸專屬對抗戰報 */}
-        {isSmoking ? (
+        {/* 核心數據區塊：減害抗菸/抗酒 衝動對抗模式 */}
+        {isUrgeTracking ? (
           <div className="my-4 space-y-3">
             {/* 今日三格戰績指標 */}
             <div className="grid grid-cols-3 gap-2.5">
-              {/* 抗菸成功次數 */}
+              {/* 抗癮成功次數 */}
               <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex flex-col justify-between">
                 <div className="flex items-center justify-between text-[11px] font-medium text-emerald-400">
                   <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> 抗癮成功
+                    <ShieldCheck className="w-3.5 h-3.5" /> 抵抗成功
                   </span>
-                  {resistedCount > 0 && onUndoSmokingUrge && (
+                  {resistedCount > 0 && onUndoUrgeAction && (
                     <button
-                      onClick={() => onUndoSmokingUrge('resisted')}
+                      onClick={() => onUndoUrgeAction(habit.id, 'resisted')}
                       className="text-slate-500 hover:text-slate-300 p-0.5 rounded"
                       title="倒扣 1 次"
                     >
@@ -223,28 +234,33 @@ export const HabitCard: React.FC<HabitCardProps> = ({
                 </div>
               </div>
 
-              {/* 抽了一根次數 */}
+              {/* 忍不住喝了/抽了次數 */}
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between">
                 <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
                   <span className="flex items-center gap-1">
-                    <Cigarette className="w-3.5 h-3.5 text-amber-400" /> 抽了一根
+                    {isAlcohol ? (
+                      <Wine className="w-3.5 h-3.5 text-amber-400" />
+                    ) : (
+                      <Cigarette className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    {isAlcohol ? '喝了一瓶' : '抽了一根'}
                   </span>
-                  {smokedCount > 0 && onUndoSmokingUrge && (
+                  {consumedCount > 0 && onUndoUrgeAction && (
                     <button
-                      onClick={() => onUndoSmokingUrge('smoked')}
+                      onClick={() => onUndoUrgeAction(habit.id, 'consumed')}
                       className="text-slate-500 hover:text-slate-300 p-0.5 rounded"
-                      title="倒扣 1 根"
+                      title={`倒扣 1 ${unitName}`}
                     >
                       <Minus className="w-3 h-3" />
                     </button>
                   )}
                 </div>
                 <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-2xl sm:text-3xl font-extrabold text-slate-300 font-mono">{smokedCount}</span>
-                  <span className="text-[10px] text-slate-400">根</span>
+                  <span className="text-2xl sm:text-3xl font-extrabold text-slate-300 font-mono">{consumedCount}</span>
+                  <span className="text-[10px] text-slate-400">{unitName}</span>
                 </div>
                 <div className="text-[10px] text-rose-400/80 mt-0.5 font-mono">
-                  -NT$ {(smokedCount * unitCost).toFixed(1)}
+                  -NT$ {(consumedCount * unitCost).toFixed(1)}
                 </div>
               </div>
 
@@ -269,21 +285,21 @@ export const HabitCard: React.FC<HabitCardProps> = ({
                 <span className="text-xs text-slate-400">今日淨省下金額：</span>
                 <span
                   className={`text-base font-extrabold font-mono ml-1.5 ${
-                    netSavedSmoking >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    netSavedUrge >= 0 ? 'text-emerald-400' : 'text-rose-400'
                   }`}
                 >
-                  NT$ {netSavedSmoking > 0 ? `+${netSavedSmoking}` : netSavedSmoking}
+                  NT$ {netSavedUrge > 0 ? `+${netSavedUrge}` : netSavedUrge}
                 </span>
               </div>
 
-              {/* 單根金額修改 */}
+              {/* 單瓶/單根金額修改 */}
               {isEditingCost ? (
                 <form onSubmit={handleSaveCost} className="flex items-center gap-1">
                   <span className="text-[10px] text-slate-400 font-mono">NT$</span>
                   <input
                     type="number"
                     min="0"
-                    step="0.5"
+                    step={isAlcohol ? '5' : '0.5'}
                     value={costInput}
                     onChange={(e) => setCostInput(e.target.value)}
                     className="w-14 px-1 py-0.5 rounded bg-slate-900 border border-emerald-500 text-[11px] text-white font-mono focus:outline-none"
@@ -299,13 +315,13 @@ export const HabitCard: React.FC<HabitCardProps> = ({
               ) : (
                 <button
                   onClick={() => {
-                    setCostInput(String(habit.cost_per_day || 6.5));
+                    setCostInput(String(habit.cost_per_day ?? (isAlcohol ? 50 : 6.5)));
                     setIsEditingCost(true);
                   }}
                   className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400"
-                  title="點此修改單根菸價格"
+                  title={`點此修改單${unitName}花費價格`}
                 >
-                  <span>單根 NT$ {habit.cost_per_day}</span>
+                  <span>每{unitName} NT$ {habit.cost_per_day}</span>
                   <Edit2 className="w-2.5 h-2.5 opacity-60 text-emerald-400" />
                 </button>
               )}
@@ -314,19 +330,28 @@ export const HabitCard: React.FC<HabitCardProps> = ({
             {/* 雙核心即時按鈕 */}
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <button
-                onClick={handleResistSmoking}
+                onClick={handleResist}
                 className="py-3 px-3 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 transition-all active:scale-[0.97]"
               >
                 <ShieldCheck className="w-4 h-4" />
-                抗菸成功 💪 (+${unitCost})
+                {isAlcohol ? `抗酒成功 💪 (+NT$${unitCost})` : `抗菸成功 💪 (+NT$${unitCost})`}
               </button>
 
               <button
-                onClick={handleSmokeOne}
+                onClick={handleConsume}
                 className="py-3 px-3 rounded-xl font-semibold text-xs sm:text-sm bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center gap-1.5 transition-all active:scale-[0.97]"
               >
-                <Cigarette className="w-4 h-4 text-amber-400" />
-                抽了一根 🚬 (-${unitCost})
+                {isAlcohol ? (
+                  <>
+                    <Wine className="w-4 h-4 text-amber-400" />
+                    喝了一瓶 🍺 (-NT${unitCost})
+                  </>
+                ) : (
+                  <>
+                    <Cigarette className="w-4 h-4 text-amber-400" />
+                    抽了一根 🚬 (-NT${unitCost})
+                  </>
+                )}
               </button>
             </div>
           </div>

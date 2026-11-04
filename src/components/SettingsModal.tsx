@@ -42,11 +42,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
 
-  // 習慣自訂每日花費
+  // 習慣自訂單價
   const soberHabit = habits.find((h) => h.id === 'sober');
   const smokeHabit = habits.find((h) => h.id === 'smoke_free');
-  const [soberCost, setSoberCost] = useState(String(soberHabit?.cost_per_day ?? 250));
-  const [smokeCost, setSmokeCost] = useState(String(smokeHabit?.cost_per_day ?? 150));
+  const [soberCost, setSoberCost] = useState(String(soberHabit?.cost_per_day ?? 50));
+  const [smokeCost, setSmokeCost] = useState(String(smokeHabit?.cost_per_day ?? 6.5));
   const [costSavedMsg, setCostSavedMsg] = useState(false);
 
   const handleSaveCosts = async (e: React.FormEvent) => {
@@ -101,7 +101,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleResetCleanSlate = async () => {
-    if (window.confirm('確定要清空所有範例紀錄，並將連勝天數由【第 0 天】全新開始嗎？')) {
+    if (window.confirm('確定要清空所有紀錄，並將所有習慣由【第 0 天】全新開始起跑嗎？')) {
       setIsResetting(true);
       await onResetAllData();
       setIsResetting(false);
@@ -124,8 +124,8 @@ create table if not exists habits (
 insert into habits (id, name, type, icon, unit, cost_per_day) values
   ('running', '跑步', 'numeric', 'Footprints', 'km', 0),
   ('workout', '重訓', 'numeric', 'Dumbbell', '組', 0),
-  ('sober', '不喝酒', 'streak', 'WineOff', null, 250),
-  ('smoke_free', '不抽菸', 'streak', 'CigaretteOff', null, 150)
+  ('sober', '節制抗酒', 'streak', 'WineOff', '瓶', 50),
+  ('smoke_free', '減害抗菸', 'streak', 'CigaretteOff', '根', 6.5)
 on conflict (id) do nothing;
 
 create table if not exists habit_logs (
@@ -193,8 +193,8 @@ alter publication supabase_realtime add table streak_resets;`;
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">系統設定與自訂花費</h2>
-              <p className="text-xs text-slate-400">調整每日省下金額、資料歸零與雲端同步</p>
+              <h2 className="text-base font-bold text-white">系統設定與自訂單價</h2>
+              <p className="text-xs text-slate-400">調整抗菸/抗酒單價、資料歸零與雲端同步</p>
             </div>
           </div>
           <button
@@ -207,12 +207,12 @@ alter publication supabase_realtime add table streak_resets;`;
 
         {/* Body */}
         <div className="p-4 space-y-5 overflow-y-auto flex-1">
-          {/* 自訂每日省下花費金額 */}
+          {/* 自訂單品花費金額 */}
           <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Coins className="w-4 h-4 text-emerald-400" />
-                自訂戒斷每日省下花費 (NT$)
+                自訂抗酒與抗菸單價 (NT$)
               </span>
               {costSavedMsg && (
                 <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
@@ -221,45 +221,45 @@ alter publication supabase_realtime add table streak_resets;`;
               )}
             </div>
             <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
-              系統會依據<strong>【連勝堅持天數 × 每日設定花費】</strong>即時計算您省下的財富。可隨時按您平時的菸酒消費習慣修改：
+              系統會依據<strong>【(抵抗次數 - 喝/抽次數) × 單品設定價格】</strong>計算您省下的財富：
             </p>
 
             <form onSubmit={handleSaveCosts} className="space-y-2.5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] text-slate-300 mb-1">
-                    🍷 不喝酒每日省下 (NT$)
+                    🍺 節制抗酒單瓶省下 (NT$)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    step="10"
+                    step="5"
                     value={soberCost}
                     onChange={(e) => setSoberCost(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-750 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-slate-500">預設 NT$ 250 (約1~2杯啤酒調酒)</span>
+                  <span className="text-[10px] text-slate-500">預設 NT$ 50 (約1罐啤酒)</span>
                 </div>
                 <div>
                   <label className="block text-[11px] text-slate-300 mb-1">
-                    🚭 不抽菸每日省下 (NT$)
+                    🚭 減害抗菸單根省下 (NT$)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    step="10"
+                    step="0.5"
                     value={smokeCost}
                     onChange={(e) => setSmokeCost(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-750 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-slate-500">預設 NT$ 150 (約1包菸)</span>
+                  <span className="text-[10px] text-slate-500">預設 NT$ 6.5 (約1包菸130元/20根)</span>
                 </div>
               </div>
               <button
                 type="submit"
                 className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-emerald-600/80 hover:bg-emerald-600 text-white transition-colors"
               >
-                儲存每日省下金額
+                儲存單品價格
               </button>
             </form>
           </div>
@@ -272,7 +272,7 @@ alter publication supabase_realtime add table streak_resets;`;
                 清空資料 · 由第 0 天全新起算
               </span>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                清除所有舊有打卡與連勝種子，讓所有習慣從今天此時此刻開始起跑。
+                清除所有舊有打卡與紀錄，讓所有習慣從今天此時此刻開始起跑。
               </p>
               {resetSuccess && (
                 <p className="text-[11px] text-emerald-400 mt-1 font-semibold">

@@ -8,8 +8,8 @@ import {
   resetStreak,
   updateHabitCost,
   resetAllToCleanSlate,
-  recordSmokingUrge,
-  undoSmokingUrge,
+  recordUrge,
+  undoUrge,
   subscribeToRealtime,
   getLocalDateString,
   calculateStreak,
@@ -97,7 +97,7 @@ export function App() {
     return logs.find((l) => l.habit_id === habitId && l.log_date === todayStr);
   };
 
-  // 戒斷型習慣快速簽到 (不喝酒)
+  // 快速簽到
   const handleQuickStreakCheckin = async (habit: Habit) => {
     await saveHabitLog({
       habit_id: habit.id,
@@ -128,15 +128,15 @@ export function App() {
     await loadData();
   };
 
-  // 減害抗菸對決記錄
-  const handleSmokingUrge = async (outcome: 'resisted' | 'smoked') => {
-    await recordSmokingUrge(outcome);
+  // 衝動對決記錄 (抗酒或抗菸)
+  const handleUrgeAction = async (habitId: string, outcome: 'resisted' | 'consumed') => {
+    await recordUrge(habitId as 'sober' | 'smoke_free', outcome);
     await loadData();
   };
 
-  // 減害抗菸倒扣 (防誤點)
-  const handleUndoSmokingUrge = async (outcome: 'resisted' | 'smoked') => {
-    await undoSmokingUrge(outcome);
+  // 衝動對決倒扣 (防誤點)
+  const handleUndoUrgeAction = async (habitId: string, outcome: 'resisted' | 'consumed') => {
+    await undoUrge(habitId as 'sober' | 'smoke_free', outcome);
     await loadData();
   };
 
@@ -153,22 +153,30 @@ export function App() {
   const workoutLogs = logs.filter((l) => l.habit_id === 'workout' && l.completed);
   const totalSets = workoutLogs.reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
 
-  const soberStreak = calculateStreak('sober', resets);
-  const soberCost = habits.find((h) => h.id === 'sober')?.cost_per_day || 250;
-  const soberSaved = soberStreak.days * soberCost;
+  // 節制抗酒累計
+  const soberLogs = logs.filter((l) => l.habit_id === 'sober');
+  const soberCost = habits.find((h) => h.id === 'sober')?.cost_per_day ?? 50;
+  const totalResistedSober = soberLogs.reduce((acc, l) => acc + (Number(l.metrics?.resisted) || 0), 0);
+  const totalConsumedSober = soberLogs.reduce((acc, l) => acc + (Number(l.metrics?.consumed) || 0), 0);
+  const soberSaved = Math.max(0, Math.round((totalResistedSober - totalConsumedSober) * soberCost * 10) / 10);
 
+  // 減害抗菸累計
   const smokeLogs = logs.filter((l) => l.habit_id === 'smoke_free');
-  const smokeCost = habits.find((h) => h.id === 'smoke_free')?.cost_per_day || 6.5;
-  const totalResisted = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.resisted) || 0), 0);
-  const totalSmoked = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.smoked) || 0), 0);
-  const smokeSaved = Math.max(0, Math.round((totalResisted - totalSmoked) * smokeCost * 10) / 10);
+  const smokeCost = habits.find((h) => h.id === 'smoke_free')?.cost_per_day ?? 6.5;
+  const totalResistedSmoke = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.resisted) || 0), 0);
+  const totalConsumedSmoke = smokeLogs.reduce((acc, l) => acc + (Number(l.metrics?.consumed ?? l.metrics?.smoked) || 0), 0);
+  const smokeSaved = Math.max(0, Math.round((totalResistedSmoke - totalConsumedSmoke) * smokeCost * 10) / 10);
 
   const totalMoneySaved = Math.round(soberSaved + smokeSaved);
 
   // 今日減害對抗快報
+  const todaySoberLog = getTodayLog('sober');
+  const todaySoberResisted = Number(todaySoberLog?.metrics?.resisted) || 0;
+  const todaySoberConsumed = Number(todaySoberLog?.metrics?.consumed) || 0;
+
   const todaySmokeLog = getTodayLog('smoke_free');
-  const todayResisted = Number(todaySmokeLog?.metrics?.resisted) || 0;
-  const todaySmoked = Number(todaySmokeLog?.metrics?.smoked) || 0;
+  const todaySmokeResisted = Number(todaySmokeLog?.metrics?.resisted) || 0;
+  const todaySmokeConsumed = Number(todaySmokeLog?.metrics?.consumed ?? todaySmokeLog?.metrics?.smoked) || 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-16">
@@ -228,9 +236,9 @@ export function App() {
                       <ShieldCheck className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-[11px] text-slate-400">今日抗菸戰報</div>
-                      <div className="text-base font-extrabold text-white font-mono">
-                        {todayResisted} <span className="text-[10px] font-normal text-emerald-400">勝</span> / {todaySmoked} <span className="text-[10px] font-normal text-slate-400">根</span>
+                      <div className="text-[11px] text-slate-400">今日對抗戰報</div>
+                      <div className="text-xs font-bold text-white font-mono mt-0.5">
+                        酒 {todaySoberResisted}勝/{todaySoberConsumed}瓶 ｜ 菸 {todaySmokeResisted}勝/{todaySmokeConsumed}根
                       </div>
                     </div>
                   </div>
@@ -269,8 +277,8 @@ export function App() {
                         onOpenResetModal={(h) => setResetModal({ isOpen: true, habit: h })}
                         onQuickStreakCheckin={handleQuickStreakCheckin}
                         onUpdateCost={handleUpdateHabitCost}
-                        onSmokingUrge={handleSmokingUrge}
-                        onUndoSmokingUrge={handleUndoSmokingUrge}
+                        onUrgeAction={handleUrgeAction}
+                        onUndoUrgeAction={handleUndoUrgeAction}
                       />
                     );
                   })}
@@ -304,7 +312,7 @@ export function App() {
         onSave={handleSaveNumericLog}
       />
 
-      {/* 戒斷破戒重置 Modal (不喝酒) */}
+      {/* 戒斷破戒重置 Modal (備用) */}
       <ResetStreakModal
         habit={resetModal.habit}
         isOpen={resetModal.isOpen}
