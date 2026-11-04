@@ -1,0 +1,43 @@
+# Netlify Configuration for HabitPulse PWA
+
+[build]
+  publish = "dist"
+  command = "npm run build"
+  # 嚴格建置過濾規則以節省 Netlify Build Minutes：
+  # 僅在核心前端檔案 (src, public, package.json, vite.config.ts, tailwind 等) 發生變更時觸發建置。
+  # 若僅修改 README.md、supabase/ 等文件，則略過建置 (exit code 0)。
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF ./src ./public ./index.html ./package.json ./package-lock.json ./vite.config.ts ./tailwind.config.js ./postcss.config.js ./tsconfig.json ./tsconfig.app.json ./tsconfig.node.json"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--prefer-offline --no-audit"
+
+# 單頁應用 (SPA) 路由支援
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# 靜態資源最佳化與快取策略
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  # Service Worker 與 Manifest 絕不能強制長期快取，以便隨時接收 PWA 更新
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

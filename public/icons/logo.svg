@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f172a" />
+      <stop offset="1" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="pulseGrad" x1="60" y1="256" x2="452" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10b981" />
+      <stop offset="0.5" stop-color="#22c55e" />
+      <stop offset="1" stop-color="#06b6d4" />
+    </linearGradient>
+    <filter id="glow" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bg)" />
+  <rect x="8" y="8" width="496" height="496" rx="120" stroke="#10b981" stroke-opacity="0.3" stroke-width="4" />
+  
+  <!-- Pulse Line Graphic -->
+  <path
+    d="M70 256 H170 L210 140 L260 380 L310 200 L345 285 L370 256 H442"
+    stroke="url(#pulseGrad)"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#glow)"
+  />
+  <circle cx="260" cy="380" r="16" fill="#10b981" />
+  <circle cx="210" cy="140" r="16" fill="#06b6d4" />
+</svg>
