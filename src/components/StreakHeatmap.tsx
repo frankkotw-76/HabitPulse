@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { Habit, HabitLog, StreakReset } from '../types/habit';
 import { getLocalDateString } from '../lib/storage';
-import { Calendar, Flame, Award, Filter, Info } from 'lucide-react';
+import { Calendar, Flame, Award, Sparkles, Compass } from 'lucide-react';
 
 interface StreakHeatmapProps {
   habits: Habit[];
   logs: HabitLog[];
-  resets: StreakReset[];
+  resets?: StreakReset[];
 }
 
-export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, resets }) => {
+export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs }) => {
   const [selectedHabitId, setSelectedHabitId] = useState<string>('all');
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
@@ -35,7 +35,6 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
   // 計算特定習慣或全習慣在某日的強度 (0 ~ 4)
   const getCellIntensity = (dateStr: string) => {
     const dayLogs = logsByDate.get(dateStr) || [];
-    const cellDate = new Date(dateStr);
 
     if (selectedHabitId === 'all') {
       let count = 0;
@@ -45,19 +44,16 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
       if (hasRunning) count += 1;
       if (hasWorkout) count += 1;
 
-      // 檢查戒斷型：若當天在此習慣最新起始日之後且未破戒
-      ['sober', 'smoke_free'].forEach((hid) => {
-        const habitResets = resets
-          .filter((r) => r.habit_id === hid)
-          .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
-        if (habitResets.length > 0) {
-          const start = new Date(habitResets[0].start_date);
-          start.setHours(0, 0, 0, 0);
-          if (cellDate >= start && cellDate <= today) {
-            count += 1;
-          }
-        }
-      });
+      // 檢查節制抗酒與減害抗菸 (衝動模式：以真實抵抗紀錄為準)
+      const soberLog = dayLogs.find((l) => l.habit_id === 'sober');
+      const smokeLog = dayLogs.find((l) => l.habit_id === 'smoke_free');
+
+      if (soberLog && (Number(soberLog.metrics?.resisted) || 0) > 0) {
+        count += 1;
+      }
+      if (smokeLog && (Number(smokeLog.metrics?.resisted) || 0) > 0) {
+        count += 1;
+      }
 
       return Math.min(4, count);
     } else {
@@ -69,17 +65,13 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
         const targetLog = dayLogs.find((l) => l.habit_id === selectedHabitId && l.completed);
         return targetLog ? 3 : 0;
       } else {
-        // streak
-        const habitResets = resets
-          .filter((r) => r.habit_id === selectedHabitId)
-          .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
-        if (habitResets.length > 0) {
-          const start = new Date(habitResets[0].start_date);
-          start.setHours(0, 0, 0, 0);
-          if (cellDate >= start && cellDate <= today) {
-            return 3;
-          }
-        }
+        // 衝動對抗模式 (sober, smoke_free)
+        const targetLog = dayLogs.find((l) => l.habit_id === selectedHabitId);
+        if (!targetLog) return 0;
+        const resisted = Number(targetLog.metrics?.resisted) || 0;
+        if (resisted >= 5) return 4;
+        if (resisted >= 2) return 3;
+        if (resisted >= 1) return 2;
         return 0;
       }
     }
@@ -104,7 +96,6 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
   // 取得當日詳細提示
   const getDayDetails = (dateStr: string) => {
     const dayLogs = logsByDate.get(dateStr) || [];
-    const cellDate = new Date(dateStr);
     const details: string[] = [];
 
     dayLogs.forEach((l) => {
@@ -114,18 +105,18 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
       if (l.habit_id === 'workout' && l.completed) {
         details.push(`🏋️ 重訓 ${l.value} 組`);
       }
-    });
-
-    ['sober', 'smoke_free'].forEach((hid) => {
-      const h = habits.find((item) => item.id === hid);
-      const habitResets = resets
-        .filter((r) => r.habit_id === hid)
-        .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
-      if (habitResets.length > 0) {
-        const start = new Date(habitResets[0].start_date);
-        start.setHours(0, 0, 0, 0);
-        if (cellDate >= start && cellDate <= today) {
-          details.push(`✨ ${h?.name || hid} 堅持清醒`);
+      if (l.habit_id === 'sober') {
+        const resisted = Number(l.metrics?.resisted) || 0;
+        const consumed = Number(l.metrics?.consumed) || 0;
+        if (resisted > 0 || consumed > 0) {
+          details.push(`🍺 節制抗酒：克制 ${resisted} 瓶${consumed > 0 ? ` / 飲酒 ${consumed} 瓶` : ''}`);
+        }
+      }
+      if (l.habit_id === 'smoke_free') {
+        const resisted = Number(l.metrics?.resisted) || 0;
+        const consumed = Number(l.metrics?.consumed ?? l.metrics?.smoked) || 0;
+        if (resisted > 0 || consumed > 0) {
+          details.push(`🚬 減害抗菸：克制 ${resisted} 根${consumed > 0 ? ` / 抽了 ${consumed} 根` : ''}`);
         }
       }
     });
@@ -139,6 +130,39 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
     if (getCellIntensity(d) > 0) activeDays++;
   });
   const completionRate = Math.round((activeDays / daysCount) * 100);
+
+  // 堅持狀態動態計算
+  const getMotivationStatus = (days: number) => {
+    if (days >= 21) {
+      return {
+        label: '自律成習',
+        color: 'text-purple-400',
+        icon: Award,
+      };
+    }
+    if (days >= 8) {
+      return {
+        label: '動能充沛',
+        color: 'text-amber-400',
+        icon: Flame,
+      };
+    }
+    if (days >= 1) {
+      return {
+        label: '漸入佳境',
+        color: 'text-emerald-400',
+        icon: Sparkles,
+      };
+    }
+    return {
+      label: '整裝待發',
+      color: 'text-slate-400',
+      icon: Compass,
+    };
+  };
+
+  const statusInfo = getMotivationStatus(activeDays);
+  const StatusIcon = statusInfo.icon;
 
   return (
     <div className="rounded-2xl bg-slate-900 border border-slate-800 p-5 shadow-xl">
@@ -196,9 +220,9 @@ export const StreakHeatmap: React.FC<StreakHeatmapProps> = ({ habits, logs, rese
         </div>
         <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/60">
           <span className="text-[11px] text-slate-400">堅持狀態</span>
-          <div className="text-xs font-bold text-amber-400 mt-1.5 flex items-center gap-1">
-            <Flame className="w-3.5 h-3.5 fill-amber-400/20" />
-            動能充沛
+          <div className={`text-xs font-bold mt-1.5 flex items-center gap-1 ${statusInfo.color}`}>
+            <StatusIcon className="w-3.5 h-3.5" />
+            {statusInfo.label}
           </div>
         </div>
       </div>
