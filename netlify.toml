@@ -6,11 +6,13 @@
   # 嚴格建置過濾規則以節省 Netlify Build Minutes：
   # 僅在核心前端檔案 (src, public, package.json, vite.config.ts, tailwind 等) 發生變更時觸發建置。
   # 若僅修改 README.md、supabase/ 等文件，則略過建置 (exit code 0)。
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF ./src ./public ./index.html ./package.json ./package-lock.json ./vite.config.ts ./tailwind.config.js ./postcss.config.js ./tsconfig.json ./tsconfig.app.json ./tsconfig.node.json"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF ./src ./public ./index.html ./package.json ./package-lock.json ./vite.config.ts ./tailwind.config.js ./postcss.config.js ./tsconfig.json ./tsconfig.app.json ./tsconfig.node.json ./.env.production ./netlify.toml"
 
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--prefer-offline --no-audit"
+  VITE_SUPABASE_URL = "https://tmjfjppvacanthodzjry.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "sb_publishable_m5y6TzQ--kBW_-H6tpYffQ_9ZBL_9sX"
 
 # 單頁應用 (SPA) 路由支援
 [[redirects]]

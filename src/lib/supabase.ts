@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// 支援讀取環境變數或 LocalStorage 中使用者自訂的 Supabase 連線設定
+// 支援讀取環境變數 (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) 或 LocalStorage 自訂連線設定
 export function getSupabaseConfig(): { url: string; key: string } {
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';

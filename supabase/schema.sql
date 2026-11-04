@@ -17,8 +17,8 @@ create table if not exists habits (
 insert into habits (id, name, type, icon, unit, cost_per_day) values
   ('running', '跑步', 'numeric', 'Footprints', 'km', 0),
   ('workout', '重訓', 'numeric', 'Dumbbell', '組', 0),
-  ('sober', '不喝酒', 'streak', 'WineOff', null, 250),
-  ('smoke_free', '不抽菸', 'streak', 'CigaretteOff', null, 150)
+  ('sober', '節制抗酒', 'streak', 'WineOff', '瓶', 50),
+  ('smoke_free', '減害抗菸', 'streak', 'CigaretteOff', '根', 6.5)
 on conflict (id) do nothing;
 
 -- 2. 打卡日誌表 (正向計量型習慣每次打卡、戒斷型每日簽到)
