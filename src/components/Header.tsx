@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Zap, Wifi, WifiOff } from 'lucide-react';
+import { Settings, Wifi, WifiOff } from 'lucide-react';
 
 export type TabType = 'today' | 'history' | 'heatmap' | 'finance';
 
@@ -27,11 +27,11 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
         {/* Brand */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-lg shadow-emerald-500/20">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <Zap className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
-            </div>
-          </div>
+          <img
+            src="/apple-touch-icon.png"
+            alt="HabitPulse App Icon"
+            className="w-10 h-10 rounded-xl shadow-lg shadow-emerald-500/20 border border-emerald-500/30 object-cover shrink-0"
+          />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
