@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Database,
@@ -10,9 +10,22 @@ import {
   AlertCircle,
   Coins,
   RotateCcw,
+  ScanFace,
+  ShieldCheck,
+  KeyRound,
+  Lock,
 } from 'lucide-react';
 import { Habit } from '../types/habit';
 import { getSupabaseConfig, saveCustomSupabaseConfig, getSupabase } from '../lib/supabase';
+import {
+  isBiometricSupported,
+  isBiometricEnabled,
+  setBiometricEnabled,
+  registerBiometric,
+  authenticateBiometric,
+  getBackupPin,
+  setBackupPin,
+} from '../lib/biometric';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -48,6 +61,58 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [soberCost, setSoberCost] = useState(String(soberHabit?.cost_per_day ?? 50));
   const [smokeCost, setSmokeCost] = useState(String(smokeHabit?.cost_per_day ?? 6.5));
   const [costSavedMsg, setCostSavedMsg] = useState(false);
+
+  // 生物辨識 (Face ID / Touch ID) 狀態
+  const [bioSupported, setBioSupported] = useState(false);
+  const [bioEnabled, setBioEnabled] = useState(isBiometricEnabled());
+  const [bioLoading, setBioLoading] = useState(false);
+  const [bioMsg, setBioMsg] = useState<{ text: string; isError?: boolean } | null>(null);
+  const [customPin, setCustomPin] = useState(getBackupPin());
+  const [pinSavedMsg, setPinSavedMsg] = useState(false);
+
+  useEffect(() => {
+    isBiometricSupported().then(setBioSupported);
+  }, []);
+
+  const handleToggleBiometric = async () => {
+    setBioMsg(null);
+    if (!bioEnabled) {
+      setBioLoading(true);
+      const res = await registerBiometric();
+      setBioLoading(false);
+      if (res.success) {
+        setBioEnabled(true);
+        setBioMsg({ text: '已成功啟用 Face ID / 生物辨識防護！' });
+      } else {
+        setBioMsg({ text: res.error || '啟用失敗', isError: true });
+      }
+    } else {
+      setBiometricEnabled(false);
+      setBioEnabled(false);
+      setBioMsg({ text: '已關閉生物辨識防護' });
+    }
+    setTimeout(() => setBioMsg(null), 3500);
+  };
+
+  const handleTestBiometric = async () => {
+    setBioLoading(true);
+    setBioMsg(null);
+    const res = await authenticateBiometric();
+    setBioLoading(false);
+    if (res.success) {
+      setBioMsg({ text: '✓ Face ID 驗證成功！' });
+    } else {
+      setBioMsg({ text: res.error || '驗證失敗', isError: true });
+    }
+    setTimeout(() => setBioMsg(null), 3500);
+  };
+
+  const handleSavePin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setBackupPin(customPin);
+    setPinSavedMsg(true);
+    setTimeout(() => setPinSavedMsg(false), 2000);
+  };
 
   const handleSaveCosts = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,6 +272,99 @@ alter publication supabase_realtime add table streak_resets;`;
 
         {/* Body */}
         <div className="p-4 space-y-5 overflow-y-auto flex-1">
+          {/* 隱私安全 (Face ID / 生物辨識鎖) */}
+          <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <ScanFace className="w-4 h-4 text-emerald-400" />
+                Face ID / 生物辨識隱私鎖
+              </span>
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  bioEnabled
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {bioEnabled ? '已啟用防護' : '未啟用'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
+              啟用後，每次開啟 HabitPulse 需通過 Face ID / Touch ID 驗證解鎖，防止他人偷看您的習慣紀錄。
+            </p>
+
+            {/* 回饋訊息 */}
+            {bioMsg && (
+              <div
+                className={`p-2 rounded-lg text-xs mb-3 flex items-center gap-1.5 ${
+                  bioMsg.isError
+                    ? 'bg-rose-950/40 text-rose-300 border border-rose-500/30'
+                    : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30'
+                }`}
+              >
+                {bioMsg.isError ? <AlertCircle className="w-3.5 h-3.5 shrink-0" /> : <Check className="w-3.5 h-3.5 shrink-0" />}
+                <span>{bioMsg.text}</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleBiometric}
+                disabled={bioLoading}
+                className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                  bioEnabled
+                    ? 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
+              >
+                <ScanFace className="w-3.5 h-3.5" />
+                {bioLoading
+                  ? '處理中...'
+                  : bioEnabled
+                  ? '關閉 Face ID 防護'
+                  : '啟用 Face ID 防護'}
+              </button>
+
+              {bioEnabled && (
+                <button
+                  type="button"
+                  onClick={handleTestBiometric}
+                  disabled={bioLoading}
+                  className="py-1.5 px-3 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  測試解鎖
+                </button>
+              )}
+            </div>
+
+            {/* 備用 PIN 碼設定 */}
+            {bioEnabled && (
+              <form onSubmit={handleSavePin} className="mt-3 pt-3 border-t border-slate-800/80 flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-slate-400 mb-0.5">
+                    備用 PIN 碼（預設 0000）
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={8}
+                    value={customPin}
+                    onChange={(e) => setCustomPin(e.target.value)}
+                    placeholder="自訂 4-8 位數字"
+                    className="w-full px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-750 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="self-end py-1 px-3 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                >
+                  {pinSavedMsg ? '已儲存' : '儲存 PIN'}
+                </button>
+              </form>
+            )}
+          </div>
+
           {/* 自訂單品花費金額 */}
           <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
             <div className="flex items-center justify-between mb-2">
