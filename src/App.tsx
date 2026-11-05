@@ -28,6 +28,8 @@ import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { HistoryTimeline } from './components/HistoryTimeline';
 import { UndoToast, ToastData } from './components/UndoToast';
 import { UrgeEditModal } from './components/UrgeEditModal';
+import { BiometricLockModal } from './components/BiometricLockModal';
+import { isBiometricEnabled } from './lib/biometric';
 import {
   Footprints,
   Dumbbell,
@@ -68,6 +70,7 @@ export function App() {
   }>({ isOpen: false, habit: null });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLocked, setIsLocked] = useState(isBiometricEnabled());
 
   // 載入資料
   const loadData = useCallback(async () => {
@@ -410,6 +413,9 @@ export function App() {
 
       {/* 即時 5 秒防誤觸 Undo Toast */}
       <UndoToast toast={undoToast} onClose={() => setUndoToast(null)} />
+
+      {/* FIDO / 生物辨識隱私防護鎖 */}
+      <BiometricLockModal isOpen={isLocked} onUnlock={() => setIsLocked(false)} />
     </div>
   );
 }
